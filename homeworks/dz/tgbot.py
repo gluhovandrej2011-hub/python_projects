@@ -1,14 +1,12 @@
 import telebot
 import telebot.types
 
-from datetime import datetime
-
-bot = telebot.TeleBot("8384750385:AAFa5WupkGQadkX4zDRj_FEWr1ydm-5QocE")
+bot = telebot.TeleBot("8659572926:AAE0B3nl_LS1mmabUIC-8zg_BOgBxtH8Apw")
 
 
 @bot.message_handler(commands=["start"])
 def command_start_handler(message: telebot.types.Message):
-    bot.send_message(message.chat.id, "добрый день! выберите свое настроение")
+    bot.send_message(message.chat.id, "добрый день! это бот для поддержки хорошего настроения")
 
 
 @bot.message_handler(commands=["mood"])
