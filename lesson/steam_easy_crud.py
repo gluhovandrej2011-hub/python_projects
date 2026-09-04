@@ -1,0 +1,211 @@
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    create_engine,
+    select,
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    joinedload,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
+
+DATABASE_URL = "postgresql+psycopg://postgres:12345@localhost:5432/steam_db"
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    role_name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    users: Mapped[list["User"]] = relationship(back_populates="role")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nickname: Mapped[str] = mapped_column(String(50), nullable=False)
+    email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    steam_level: Mapped[int] = mapped_column(Integer, nullable=False)
+    hours_played: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_online: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    is_online: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    role_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_roles.id", ondelete="RESTRICT", onupdate="RESTRICT"),
+        nullable=False,
+    )
+
+    role: Mapped[UserRole] = relationship(back_populates="users")
+
+    def last_online_to_str(self):
+        return self.last_online.strftime("%d.%m.%Y %H:%M:%S")
+
+    def is_online_to_str(self):
+        return "да" if self.is_online == True else "нет"
+
+
+engine = create_engine(DATABASE_URL, echo=False)
+
+get_session_local = sessionmaker(
+    bind=engine,
+    expire_on_commit=False,
+)
+
+
+def get_all_users_with_roles(session: Session) -> list[User]:
+    query = select(User).options(joinedload(User.role)).order_by(User.id)
+
+    return list(session.scalars(query).all())
+
+
+def print_users_with_roles(users: list[User]):
+    print("Пользователи:")
+
+    print(
+        f"{'ID':<5}{'NICKNAME':<20}{'EMAIL':<30}{'LEVEL':<10}{'HOURS':<10}{'LAST ONLINE':<22}{'ONLINE':<10}{'ROLE ID':<10}{'ROLE NAME':<15}{'DESCRIPTION'}"
+    )
+
+    for user in users:
+
+        print(
+            f"{user.id:<5}"
+            f"{user.nickname:<20}"
+            f"{user.email:<30}"
+            f"{user.steam_level:<10}"
+            f"{user.hours_played:<10}"
+            f"{user.last_online_to_str():<22}"
+            f"{user.is_online_to_str():<10}"
+            f"{user.role_id:<10}"
+            f"{user.role.role_name:<15}"
+            f"{user.role.description}"
+        )
+
+
+def get_all_roles(session: Session) -> list[UserRole]:
+    query = select(UserRole).order_by(UserRole.id)
+
+    return list(session.scalars(query).all())
+
+
+def get_role_by_id(session: Session, id: int) -> UserRole | None:
+    return session.get(UserRole, id)
+
+
+def add_new_role(session: Session, role: UserRole):
+    session.add(role)
+    session.commit()
+
+
+def delete_role_by_id(session: Session, id: int):
+    role = get_role_by_id(session, id)
+
+    if role == None:
+        return False
+
+    session.delete(role)
+    session.commit()
+
+    return True
+
+
+def print_one_role(role: UserRole):
+    print(f"{role.id:<5}" f"{role.role_name:<15}" f"{role.description:<50}")
+
+
+def print_roles_table_header():
+    print(f"{'ID':<5}{'ROLE NAME':<15}{'DESCRIPTION':<50}")
+
+
+def print_roles(roles: list[UserRole]):
+    print("Роли:")
+
+    print_roles_table_header()
+
+    for role in roles:
+        print_one_role(role)
+
+
+with get_session_local() as session:
+    is_run = True
+
+    while is_run == True:
+        try:
+            users_with_roles = get_all_users_with_roles(session)
+            print_users_with_roles(users_with_roles)
+
+            print("\n" + "*" * 50 + "\n")
+
+            roles = get_all_roles(session)
+            print_roles(roles)
+
+            print("\n" + "=" * 100 + "\n")
+
+            print("Меню:")
+            print("1. Вывести роль по id")
+            print("2. Добавить новую роль")
+            print("3. Удалить роль по id")
+            print("4. Обновить роль по id")
+
+            print("5. Вывести пользователя по id")
+            print("6. Добавить нового пользователя")
+            print("7. Удалить пользователя по id")
+            print("8. Обновить пользователя по id")
+
+            print("0. Выход")
+
+            menu_number = int(input("выберите пункт меню: "))
+
+            if menu_number == 1:
+                id = int(input("введите id роли: "))
+                role = get_role_by_id(session, id)
+
+                print_roles_table_header()
+
+                if role == None:
+                    print(f"Роль с id {id} не найдена")
+                else:
+                    print_one_role(role)
+
+            elif menu_number == 2:
+                role_name = input("введите название роли: ")
+                description = input("введите описание роли: ")
+
+                add_new_role(
+                    session, UserRole(role_name=role_name, description=description)
+                )
+
+                print("успешно добавлено")
+            elif menu_number == 3:
+                id = int(input("введите id роли: "))
+
+                is_deleted = delete_role_by_id(session, id)
+
+                if is_deleted == True:
+                    print("Роль удалена")
+                else:
+                    print("Роль не найдена")
+
+                    
+                    input("\n\n\nдля продолжения нажмите <Enter>\n\n\n")
+        except Exception as e:
+            print(
+                f"Ошибка в работе с программой. Кратко: {str(e)}. Подробно: {repr(e)}"
+            )
